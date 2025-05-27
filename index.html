@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>voca-box</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .recording {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .drop-zone {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #0d6efd;
+            background-color: #f8f9fa;
+        }
+
+        .message-item {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .message-item:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .audio-player {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .status-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .file-icon {
+            font-size: 2rem;
+            margin-right: 1rem;
+        }
+
+        .recording-timer {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- Status Indicator -->
+    <div id="statusIndicator" class="status-indicator">
+        <div class="alert alert-success d-none" id="connectedStatus">
+            <i class="fas fa-wifi"></i> Connected
+        </div>
+        <div class="alert alert-danger d-none" id="disconnectedStatus">
+            <i class="fas fa-wifi"></i> Disconnected
+        </div>
+    </div>
+
+    <div class="container py-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center mb-4">
+                    <i class="fas fa-share-alt text-primary"></i>
+                    voca-box
+                </h1>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-microphone text-danger"></i>
+                            Voice Recording
+                        </h5>
+                    </div>
+                    <div class="card-body text-center">
+                        <div id="recordingStatus" class="mb-3">
+                            <span class="badge bg-secondary">Ready to record</span>
+                        </div>
+                        <div id="recordingTimer" class="recording-timer mb-3" style="display: none;">
+                            00:00
+                        </div>
+                        <button id="startRecord" class="btn btn-danger btn-lg me-2">
+                            <i class="fas fa-microphone"></i> Start
+                        </button>
+                        <button id="stopRecord" class="btn btn-secondary btn-lg" disabled>
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                        <audio id="audioPreview" class="audio-player mt-3" controls style="display: none;"></audio>
+                        <div class="mt-3">
+                            <button id="uploadRecording" class="btn btn-success" style="display: none;">
+                                <i class="fas fa-upload"></i> Upload Recording
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-file-upload text-primary"></i>
+                            File Upload
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="dropZone" class="drop-zone">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <p class="mb-2">Drag & drop files here</p>
+                            <p class="text-muted small">or click to browse</p>
+                            <input type="file" id="fileInput" class="d-none" multiple>
+                        </div>
+                        <div class="mt-3 text-muted small">
+                            <strong>Supported formats:</strong> MP3, MP4, MKV, PNG, JPEG, PDF, WebM, OGG, TXT, JSON, YAML, ZIP
+                            <br>
+                            <strong>Max size:</strong> 1 GB per file
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div id="uploadProgress" class="row mb-4" style="display: none;">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span id="uploadFileName">Uploading...</span>
+                            <span id="uploadPercent">0%</span>
+                        </div>
+                        <div class="progress">
+                            <div id="uploadProgressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages List -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list text-info"></i>
+                            Shared Files & Messages
+                        </h5>
+                        <span id="messageCount" class="badge bg-primary">0 files</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="messagesList">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-inbox fa-3x mb-3"></i>
+                                <p>No files uploaded yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="notificationToast" class="toast" role="alert">
+            <div class="toast-header">
+                <i class="fas fa-bell text-primary me-2"></i>
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class FileShareApp {
+            constructor() {
+                this.ws = null;
+                this.recorder = null;
+                this.recordedBlob = null;
+                this.recordingStartTime = null;
+                this.recordingTimer = null;
+                this.supportedFormats = ['mp3', 'mp4', 'mkv', 'png', 'jpeg', 'jpg', 'pdf', 'webm', 'ogg', 'txt', 'json', 'yaml', 'yml', 'zip'];
+
+                this.initializeElements();
+                this.setupEventListeners();
+                this.connectWebSocket();
+                this.loadMessages();
+            }
+
+            initializeElements() {
+                this.elements = {
+                    startRecord: document.getElementById('startRecord'),
+                    stopRecord: document.getElementById('stopRecord'),
+                    uploadRecording: document.getElementById('uploadRecording'),
+                    audioPreview: document.getElementById('audioPreview'),
+                    recordingStatus: document.getElementById('recordingStatus'),
+                    recordingTimer: document.getElementById('recordingTimer'),
+                    dropZone: document.getElementById('dropZone'),
+                    fileInput: document.getElementById('fileInput'),
+                    messagesList: document.getElementById('messagesList'),
+                    messageCount: document.getElementById('messageCount'),
+                    uploadProgress: document.getElementById('uploadProgress'),
+                    uploadProgressBar: document.getElementById('uploadProgressBar'),
+                    uploadFileName: document.getElementById('uploadFileName'),
+                    uploadPercent: document.getElementById('uploadPercent'),
+                    connectedStatus: document.getElementById('connectedStatus'),
+                    disconnectedStatus: document.getElementById('disconnectedStatus'),
+                    notificationToast: document.getElementById('notificationToast')
+                };
+            }
+
+            setupEventListeners() {
+                // Recording controls
+                this.elements.startRecord.addEventListener('click', () => this.startRecording());
+                this.elements.stopRecord.addEventListener('click', () => this.stopRecording());
+                this.elements.uploadRecording.addEventListener('click', () => this.uploadRecording());
+
+                // File upload
+                this.elements.dropZone.addEventListener('click', () => this.elements.fileInput.click());
+                this.elements.dropZone.addEventListener('dragover', (e) => this.handleDragOver(e));
+                this.elements.dropZone.addEventListener('dragleave', (e) => this.handleDragLeave(e));
+                this.elements.dropZone.addEventListener('drop', (e) => this.handleDrop(e));
+                this.elements.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+            }
+
+            connectWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+                this.ws = new WebSocket(wsUrl);
+
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.showConnectionStatus(true);
+                };
+
+                this.ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    this.showConnectionStatus(false);
+                    // Reconnect after 3 seconds
+                    setTimeout(() => this.connectWebSocket(), 3000);
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.showConnectionStatus(false);
+                };
+
+                this.ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'new_message') {
+                        this.loadMessages();
+                        this.showNotification('New file uploaded!', data.filename);
+                    }
+                };
+            }
+
+            showConnectionStatus(connected) {
+                if (connected) {
+                    this.elements.connectedStatus.classList.remove('d-none');
+                    this.elements.disconnectedStatus.classList.add('d-none');
+                } else {
+                    this.elements.connectedStatus.classList.add('d-none');
+                    this.elements.disconnectedStatus.classList.remove('d-none');
+                }
+            }
+
+            showNotification(title, message) {
+                const toast = new bootstrap.Toast(this.elements.notificationToast);
+                this.elements.notificationToast.querySelector('.toast-body').textContent = message;
+                toast.show();
+            }
+
+            async startRecording() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    this.recorder = new MediaRecorder(stream);
+                    const chunks = [];
+
+                    this.recorder.ondataavailable = (e) => chunks.push(e.data);
+                    this.recorder.onstop = () => {
+                        this.recordedBlob = new Blob(chunks, { type: 'audio/webm' });
+                        this.elements.audioPreview.src = URL.createObjectURL(this.recordedBlob);
+                        this.elements.audioPreview.style.display = 'block';
+                        this.elements.uploadRecording.style.display = 'inline-block';
+                    };
+
+                    this.recorder.start();
+                    this.recordingStartTime = Date.now();
+                    this.startRecordingTimer();
+
+                    this.elements.startRecord.disabled = true;
+                    this.elements.startRecord.classList.add('recording');
+                    this.elements.stopRecord.disabled = false;
+                    this.elements.recordingStatus.innerHTML = '<span class="badge bg-danger">Recording...</span>';
+                } catch (error) {
+                    console.error('Error starting recording:', error);
+                    alert('Could not access microphone. Please check permissions.');
+                }
+            }
+
+            stopRecording() {
+                if (this.recorder && this.recorder.state === 'recording') {
+                    this.recorder.stop();
+                    this.recorder.stream.getTracks().forEach(track => track.stop());
+
+                    this.elements.startRecord.disabled = false;
+                    this.elements.startRecord.classList.remove('recording');
+                    this.elements.stopRecord.disabled = true;
+                    this.elements.recordingStatus.innerHTML = '<span class="badge bg-success">Recording ready</span>';
+
+                    this.stopRecordingTimer();
+                }
+            }
+
+            startRecordingTimer() {
+                this.elements.recordingTimer.style.display = 'block';
+                this.recordingTimer = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - this.recordingStartTime) / 1000);
+                    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                    const seconds = (elapsed % 60).toString().padStart(2, '0');
+                    this.elements.recordingTimer.textContent = `${minutes}:${seconds}`;
+                }, 1000);
+            }
+
+            stopRecordingTimer() {
+                if (this.recordingTimer) {
+                    clearInterval(this.recordingTimer);
+                    this.recordingTimer = null;
+                }
+                this.elements.recordingTimer.style.display = 'none';
+            }
+
+            async uploadRecording() {
+                if (!this.recordedBlob) return;
+
+                const formData = new FormData();
+                const filename = `recording_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+                formData.append('file', this.recordedBlob, filename);
+
+                try {
+                    await this.uploadFile(formData, filename);
+
+                    // Reset recording UI
+                    this.elements.audioPreview.style.display = 'none';
+                    this.elements.uploadRecording.style.display = 'none';
+                    this.elements.recordingStatus.innerHTML = '<span class="badge bg-secondary">Ready to record</span>';
+                    this.recordedBlob = null;
+                } catch (error) {
+                    console.error('Upload failed:', error);
+                    alert('Upload failed. Please try again.');
+                }
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                this.elements.dropZone.classList.add('dragover');
+            }
+
+            handleDragLeave(e) {
+                e.preventDefault();
+                this.elements.dropZone.classList.remove('dragover');
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                this.elements.dropZone.classList.remove('dragover');
+                const files = Array.from(e.dataTransfer.files);
+                this.processFiles(files);
+            }
+
+            handleFileSelect(e) {
+                const files = Array.from(e.target.files);
+                this.processFiles(files);
+                e.target.value = ''; // Reset input
+            }
+
+            processFiles(files) {
+                for (const file of files) {
+                    if (!this.validateFile(file)) continue;
+                    this.uploadFileFromInput(file);
+                }
+            }
+
+            validateFile(file) {
+                const extension = file.name.split('.').pop().toLowerCase();
+                if (!this.supportedFormats.includes(extension)) {
+                    alert(`File type .${extension} is not supported.`);
+                    return false;
+                }
+
+                if (file.size > 1024 * 1024 * 1024) { // 1GB
+                    alert('File size exceeds 1GB limit.');
+                    return false;
+                }
+
+                return true;
+            }
+
+            async uploadFileFromInput(file) {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    await this.uploadFile(formData, file.name);
+                } catch (error) {
+                    console.error('Upload failed:', error);
+                    alert(`Upload failed for ${file.name}. Please try again.`);
+                }
+            }
+
+            async uploadFile(formData, filename) {
+                return new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            this.updateProgress(filename, percent);
+                        }
+                    };
+
+                    xhr.onload = () => {
+                        this.hideProgress();
+                        if (xhr.status === 200) {
+                            resolve(xhr.response);
+                        } else {
+                            reject(new Error(`HTTP ${xhr.status}`));
+                        }
+                    };
+
+                    xhr.onerror = () => {
+                        this.hideProgress();
+                        reject(new Error('Network error'));
+                    };
+
+                    xhr.open('POST', '/upload');
+                    xhr.send(formData);
+                });
+            }
+
+            updateProgress(filename, percent) {
+                this.elements.uploadProgress.style.display = 'block';
+                this.elements.uploadFileName.textContent = filename;
+                this.elements.uploadPercent.textContent = `${percent}%`;
+                this.elements.uploadProgressBar.style.width = `${percent}%`;
+            }
+
+            hideProgress() {
+                this.elements.uploadProgress.style.display = 'none';
+            }
+
+            async loadMessages() {
+                try {
+                    const response = await fetch('/messages');
+                    const messages = await response.json();
+                    this.renderMessages(messages || []);
+                } catch (error) {
+                    console.error('Failed to load messages:', error);
+                }
+            }
+
+            renderMessages(messages) {
+                this.elements.messageCount.textContent = `${messages.length} file${messages.length !== 1 ? 's' : ''}`;
+
+                if (messages.length === 0) {
+                    this.elements.messagesList.innerHTML = `
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-inbox fa-3x mb-3"></i>
+                            <p>No files uploaded yet</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const html = messages.map(msg => {
+                    const icon = this.getFileIcon(msg.filename);
+                    const size = this.formatFileSize(msg.size);
+                    const date = new Date(msg.created).toLocaleString();
+
+                    return `
+                        <div class="message-item border rounded p-3 mb-3" onclick="app.handleMessageClick(${msg.id}, '${msg.filename}')">
+                            <div class="d-flex align-items-center">
+                                <div class="file-icon text-primary">
+                                    <i class="${icon}"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">${msg.filename}</h6>
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock"></i> ${date} &nbsp;&nbsp;
+                                        <i class="fas fa-hdd"></i> ${size}
+                                    </small>
+                                </div>
+                                <div class="text-end">
+                                    <i class="fas fa-download text-muted"></i>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                this.elements.messagesList.innerHTML = html;
+            }
+
+            getFileIcon(filename) {
+                const ext = filename.split('.').pop().toLowerCase();
+                const iconMap = {
+                    mp3: 'fas fa-music',
+                    mp4: 'fas fa-video',
+                    mkv: 'fas fa-video',
+                    webm: 'fas fa-microphone',
+                    ogg: 'fas fa-microphone',
+                    png: 'fas fa-image',
+                    jpg: 'fas fa-image',
+                    jpeg: 'fas fa-image',
+                    pdf: 'fas fa-file-pdf',
+                    txt: 'fas fa-file-alt',
+                    json: 'fas fa-file-code',
+                    yaml: 'fas fa-file-code',
+                    yml: 'fas fa-file-code',
+                    zip: 'fas fa-file-archive',
+                };
+                return iconMap[ext] || 'fas fa-file';
+            }
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            handleMessageClick(id, filename) {
+                const ext = filename.split('.').pop().toLowerCase();
+                const audioFormats = ['mp3', 'webm', 'ogg'];
+
+                if (audioFormats.includes(ext)) {
+                    this.playAudio(id);
+                } else {
+                    this.downloadFile(id, filename);
+                }
+            }
+
+            playAudio(id) {
+                // Remove existing audio players
+                document.querySelectorAll('.inline-audio-player').forEach(player => player.remove());
+
+                const audio = document.createElement('audio');
+                audio.className = 'inline-audio-player audio-player mt-2';
+                audio.controls = true;
+                audio.src = `/message/${id}`;
+
+                const messageItem = event.currentTarget;
+                messageItem.appendChild(audio);
+                audio.play().catch(e => console.log('Auto-play prevented'));
+            }
+
+            downloadFile(id, filename) {
+                const link = document.createElement('a');
+                link.href = `/message/${id}`;
+                link.download = filename;
+                link.click();
+            }
+        }
+
+        // Initialize the app
+        const app = new FileShareApp();
+    </script>
+</body>
+</html>
